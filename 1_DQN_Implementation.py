@@ -114,6 +114,7 @@ class DQN_Agent():
 		os.chdir(save_dir)
 
 		total_t_iter = 0
+		total_updates = 0
 
 
 		for i_episode in range(self.episodes):
@@ -136,6 +137,8 @@ class DQN_Agent():
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				total_reward+=reward
+				# if total_updates==100:
+				# print("updates",total_updates)
 
 				if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
 					print("success")
@@ -155,15 +158,17 @@ class DQN_Agent():
 				q_value_target = self.model.predict(state)
 				q_value_target[0][action] = q_value_prime
 				self.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
+				total_updates+=1
+				if total_updates % 10000== 0:
+					print("saving model at",total_updates)
+					model_name = 'lqn_%d_model.h5' %(total_updates)
+					filepath = os.path.join(save_dir, model_name)
+					self.model.save(model_name)
 				state = next_state
 
 			total_t_iter+=t_iter+1
 			print("Total iterations is",total_t_iter)
 			print('----------------')
-			if (total_t_iter) % 1000== 0:
-				model_name = 'lqn_%d_model.h5' %(total_t_iter)
-				filepath = os.path.join(save_dir, model_name)
-				self.model.save(model_name)
 
 			if ep_terminate==True:
 				break
