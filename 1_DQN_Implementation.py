@@ -117,7 +117,7 @@ class DQN_Agent():
 			state = self.env.reset()
 			state = np.reshape(state,[1,self.state_size])	
 			# print(self.model.predict(state))
-			print('Episode no ',i_episode)
+			print('Episode no ',i_episode+1)
 			total_reward = 0
 
 			if total_t_iter>=100000:
@@ -127,17 +127,17 @@ class DQN_Agent():
 			for t_iter in range(self.iterations):
 
 				action = self.epsilon_greedy_policy(self.model.predict(state)) 
-				self.env.render()
+				# self.env.render()
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				total_reward+=reward
-				total_t_iter+=t_iter
 				if done:
 					q_value_prime = reward
 					q_value_target = self.model.predict(state)
 					q_value_target[0][action] = q_value_prime
 					self.model.fit(state,q_value_target,epochs=1, verbose=0)
 					print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
+					print("---------------")
 					break
 				else:
 					q_value_prime = reward + self.gamma * np.max(self.model.predict(next_state)[0])
@@ -147,6 +147,7 @@ class DQN_Agent():
 				self.model.fit(state,q_value_target,epochs=1, verbose=0)
 				state = next_state
 
+			total_t_iter+=t_iter
 
 			if (total_t_iter) % 1000== 0:
 				model_name = 'lqn_%d_model.h5' %(total_t_iter)
