@@ -122,35 +122,41 @@ class DQN_Agent():
 			state = self.env.reset()
 			state = np.reshape(state,[1,self.state_size])	
 			# print(self.model.predict(state))
-			print('Episode no ',i_episode)
+
+			print('Episode no ',i_episode+1)
 			total_reward = 0
 
 			if total_t_iter>=100000:
 				self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
-			# print(self.epsilon)		
+			print('epsilon is',self.epsilon)		
 
 			for t_iter in range(self.iterations):
 				action = self.epsilon_greedy_policy(self.model.predict(state)) 
 				self.env.render()
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
-				self.memory.append((state, action, reward, next_state, done))	
-				state=next_state
+				self.memory.append((state, action, reward, next_state, done))
 				total_reward+=reward					
-				total_t_iter+=t_iter #Why += Isn't that like an AP?
-				if done:
-					print("Episode finished after {} iterations with %d reward".format(t_iter+1)%(total_reward)) 
-					break
+		
+				# print(total_t_iter)
+				# print("t iter is %d"%(t_iter))
+
 				if len(self.memory) > self.batch_size:
 					minibatch = random.sample(self.memory, self.batch_size)
-					for state, action, reward, next_state, done in minibatch:
-						q_value_prime = reward
-						if not done:
-							q_value_prime = reward
-							q_value_target = self.model.predict(state)
-							q_value_target[0][action] = q_value_prime
-							self.model.fit(state,q_value_target,epochs=1, verbose=0)				
-
+					for m_state, m_action, m_reward, m_next_state, m_done in minibatch:
+						m_q_value_prime = m_reward
+						if not m_done:
+							m_q_value_prime = m_reward + self.gamma * np.max(self.model.predict(m_next_state)[0])
+							m_q_value_target = self.model.predict(m_state)
+							m_q_value_target[0][m_action] = m_q_value_prime
+							self.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)					
+				state=next_state
+				if done:
+					print("Episode finished after {} iterations with %d reward".format(t_iter+1)%(total_reward)) 
+					print('----------------')	
+					break
+				
+			total_t_iter+=t_iter #Why += Isn't that like an AP?
 			if (total_t_iter) % 1000 == 0:
 				model_name = 'lqn_%d_model.h5' %(total_t_iter)
 				filepath = os.path.join(save_dir, model_name)
