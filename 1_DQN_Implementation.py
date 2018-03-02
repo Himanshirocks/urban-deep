@@ -75,10 +75,12 @@ class DQN_Agent():
 			self.gamma = 1
 			self.episodes = 3000 #given in handout
 			self.iterations = 100000 #check how many, stops at 200
+			self.terminate = 0 #0 for this env
 		elif environment_name == 'CartPole-v0':
 			self.gamma = 0.99
 			self.iterations = 1000000 #given in handout
 			self.episodes = 3000 #check how many
+			self.terminate = 1
 		self.alpha = 0.0001
 		self.epsilon = 0.5
 		episodes = 100
@@ -106,12 +108,13 @@ class DQN_Agent():
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
 
-		save_dir = os.path.join(os.getcwd(), 'saved_models')
+		save_dir = os.path.join(os.getcwd(), 'saved_models_lqn')
 		if not os.path.isdir(save_dir):
 			os.makedirs(save_dir)
 		os.chdir(save_dir)
 
 		total_t_iter = 0
+
 
 		for i_episode in range(self.episodes):
 			state = self.env.reset()
@@ -120,9 +123,11 @@ class DQN_Agent():
 			print('Episode no ',i_episode+1)
 			total_reward = 0
 
+			ep_terminate = False
+
 			if total_t_iter>=100000:
 				self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
-			# print(self.epsilon)		
+			print('epsilon is',self.epsilon)		
 
 			for t_iter in range(self.iterations):
 
@@ -131,29 +136,38 @@ class DQN_Agent():
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				total_reward+=reward
+
+				if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
+					print("success")
+					ep_terminate = True
+					break
+
 				if done:
 					q_value_prime = reward
 					q_value_target = self.model.predict(state)
 					q_value_target[0][action] = q_value_prime
-					self.model.fit(state,q_value_target,epochs=1, verbose=0)
+					self.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
 					print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
-					print("---------------")
 					break
 				else:
 					q_value_prime = reward + self.gamma * np.max(self.model.predict(next_state)[0])
 
 				q_value_target = self.model.predict(state)
 				q_value_target[0][action] = q_value_prime
-				self.model.fit(state,q_value_target,epochs=1, verbose=0)
+				self.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
 				state = next_state
 
-			total_t_iter+=t_iter
-
+			total_t_iter+=t_iter+1
+			print("Total iterations is",total_t_iter)
+			print('----------------')
 			if (total_t_iter) % 1000== 0:
 				model_name = 'lqn_%d_model.h5' %(total_t_iter)
 				filepath = os.path.join(save_dir, model_name)
-
 				self.model.save(model_name)
+
+			if ep_terminate==True:
+				break
+
 		print("Total iterations is %d" %(total_t_iter))
 
 
