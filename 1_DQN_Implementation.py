@@ -34,26 +34,26 @@ class QNetwork():
 	# Helper funciton to load model weights. 
 		pass
 
-class Replay_Memory():
+# class Replay_Memory():
 
-	def __init__(self, memory_size=50000, burn_in=10000):
+# 	def __init__(self, memory_size=50000, burn_in=10000):
 
-		# The memory essentially stores transitions recorder from the agent
-		# taking actions in the environment.
+# 		# The memory essentially stores transitions recorder from the agent
+# 		# taking actions in the environment.
 
-		# Burn in episodes define the number of episodes that are written into the memory from the 
-		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
-		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
-		pass
+# 		# Burn in episodes define the number of episodes that are written into the memory from the 
+# 		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
+# 		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
+# 		pass
 
-	def sample_batch(self, batch_size=32):
-		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
-		# You will feed this to your model to train.
-		pass
+# 	def sample_batch(self, batch_size=32):
+# 		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
+# 		# You will feed this to your model to train.
+# 		pass
 
-	def append(self, transition):
-		# Appends transition to the memory. 	
-		pass
+# 	def append(self, transition):
+# 		# Appends transition to the memory. 	
+# 		pass
 
 class DQN_Agent():
 
@@ -80,27 +80,36 @@ class DQN_Agent():
 		if environment_name == 'MountainCar-v0':
 			self.gamma = 1
 			self.episodes = 3000 #given in handout
-			self.iterations = 100000 #check how many, stops at 200
+			self.iterations = 201 #check how many, stops at 200
 			self.terminate = 0 #0 for this env
+			self.environment_num = 1
 		elif environment_name == 'CartPole-v0':
 			self.gamma = 0.99
 			self.iterations = 1000000 #given in handout
-			self.episodes = 3000 #check how many
+			self.episodes = 5000 #check how many
 			self.terminate = 1
-		self.epsilon = 0.5
+			self.environment_num = 2
+		self.train_epsilon = 0.5
+		self.train_evaluate_epsilon = 0.05
 		# episodes = 100
 		#the network stuff comes here
 		self.q_network = QNetwork(environment_name)
 
 
-	def epsilon_greedy_policy(self, q_values):
+	def epsilon_greedy_policy(self, q_values, train_test_var):
 		# Creating epsilon greedy probabilities to sample from.             
 		rand = np.random.uniform(0,1)
-
-		if(rand<=self.epsilon):
-			return np.random.randint(0,self.action_size)
+		#Different Episolns for fitting model and evaluating the training
+		if train_test_var:
+			if(rand<=self.train_epsilon):
+				return np.random.randint(0,self.action_size)
+			else:
+				return self.greedy_policy(q_values)
 		else:
-			return self.greedy_policy(q_values) 
+			if(rand<=self.train_evaluate_epsilon):
+				return np.random.randint(0,self.action_size)
+			else:
+				return self.greedy_policy(q_values) 
 
 	def greedy_policy(self, q_values):
 		# Creating greedy policy for test time. 
@@ -111,13 +120,14 @@ class DQN_Agent():
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
 
-		save_dir = os.path.join(os.getcwd(), 'saved_models_lqn')
+		save_dir = os.path.join(os.getcwd(), 'saved_models_lqn_final')
 		if not os.path.isdir(save_dir):
 			os.makedirs(save_dir)
 		os.chdir(save_dir)
 
 		# total_t_iter = 0
 		total_updates = 0
+		success_count = 0
 
 
 		for i_episode in range(self.episodes):
@@ -128,30 +138,30 @@ class DQN_Agent():
 			total_reward = 0
 			ep_terminate = False
 
-			print('epsilon is',self.epsilon)		
+			print('epsilon is',self.train_epsilon)		
 
 			for t_iter in range(self.iterations):
 
-				action = self.epsilon_greedy_policy(self.q_network.model.predict(state)) 
+				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
 				if total_updates<=100000:
-					self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
+					self.train_epsilon = self.train_epsilon - 0.45e-05 #decay epsilon
 
-				self.env.render()
+				# if i_episode >=2500:
+				# 	self.env.render()
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				total_reward+=reward
 				# if total_updates==100:
-
-				if (self.terminate==0 and state[0][0]==0.5) or (self.terminate==1 and t_iter==200):
-					print("success")
-					ep_terminate = True
-					break
 
 				if done:
 					q_value_prime = reward
 					q_value_target = self.q_network.model.predict(state)
 					q_value_target[0][action] = q_value_prime
 					self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
+					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
+						success_count+=1
+						print("success")
+						# ep_terminate = True
 					print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
 					break
 				else:
@@ -161,9 +171,9 @@ class DQN_Agent():
 				q_value_target[0][action] = q_value_prime
 				self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
 				total_updates+=1
-				if total_updates % 100== 0:
-					print("saving model at",total_updates)
-					model_name = 'lqn_%d_model.h5' %(total_updates)
+				if total_updates % 10000 == 0:
+					print("Saving model at",total_updates)
+					model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,total_updates) 
 					filepath = os.path.join(save_dir, model_name)
 					self.q_network.model.save(model_name)
 				state = next_state
@@ -174,14 +184,14 @@ class DQN_Agent():
 
 			print('----------------')
 
-			if ep_terminate==True:
-				print("saving model at",total_updates)
-				model_name = 'lqn_%d_model_final.h5' %(total_updates)
-				filepath = os.path.join(save_dir, model_name)
-				self.q_network.model.save(model_name)
-				break
+			# if ep_terminate==True:
 
-		print("Ended")
+				# break
+		print("Saving final model at",total_updates)
+		model_name = 'lqn_%d_%d_model_final.h5' %(self.environment_num,total_updates) 
+		filepath = os.path.join(save_dir, model_name)
+		self.q_network.model.save(model_name)
+		print("Total success is ",success_count)
 
 
 		# If you are using a replay memory, you should interact with environment here, and store these 
@@ -190,7 +200,35 @@ class DQN_Agent():
 	def test(self, model_file=None):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
-		pass
+		for i in range(10000, 30000, 10000):
+			model_name = '/saved_models_lqn_final/lqn_%d_%d_model_final.h5' %(self.environment_num) %(i)
+			model = load_model(model_name)
+			total_reward = 0
+			for e in range(20):
+				print('Episode no ',i_episode+1)
+				state = self.env.reset()
+				state = np.reshape(state,[1,self.state_size])	
+
+				for t_iter in range(self.iterations):
+
+					action = self.epsilon_greedy_policy(self.q_network.model.predict(state),0) 					
+
+					# self.env.render()
+					next_state, reward, done, info = self.env.step(action)
+					next_state = np.reshape(state,[1,self.state_size])	
+					total_reward+=reward
+					
+					# if (self.terminate==0 and state[0][0]==0.5) or (self.terminate==1 and t_iter==200):
+					# 	print("success")
+					# 	ep_terminate = True
+					# 	break
+
+					if done:
+						print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
+						break			
+					state = next_state
+
+
 
   #   def burn_in_memory():
 		# # # Initialize your replay memory with a burn_in number of episodes / transitions. 
