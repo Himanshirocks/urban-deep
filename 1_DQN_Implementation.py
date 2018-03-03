@@ -13,8 +13,14 @@ class QNetwork():
 	# and output Q values of the actions available to the agent as the output. 
 
 	def __init__(self, environment_name):
+		self.env = gym.make(environment_name)
+		self.model = Sequential()
+		self.state_size = self.env.observation_space.shape[0]
+		self.action_size = self.env.action_space.n
+		self.alpha = 0.0001
 
-		pass
+		self.model.add(Dense(self.action_size, input_dim=self.state_size,use_bias=True, activation='linear'))
+		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
 
 	def save_model_weights(self, suffix):
 	# Helper function to save your model / weights.
@@ -81,13 +87,10 @@ class DQN_Agent():
 			self.iterations = 1000000 #given in handout
 			self.episodes = 3000 #check how many
 			self.terminate = 1
-		self.alpha = 0.0001
 		self.epsilon = 0.5
-		episodes = 100
-
-		self.model = Sequential()
-		self.model.add(Dense(self.action_size, input_dim=self.state_size,use_bias=True, activation='linear'))
-		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
+		# episodes = 100
+		#the network stuff comes here
+		self.q_network = QNetwork(environment_name)
 
 
 	def epsilon_greedy_policy(self, q_values):
@@ -113,7 +116,7 @@ class DQN_Agent():
 			os.makedirs(save_dir)
 		os.chdir(save_dir)
 
-		total_t_iter = 0
+		# total_t_iter = 0
 		total_updates = 0
 
 
@@ -123,57 +126,62 @@ class DQN_Agent():
 			# print(self.model.predict(state))
 			print('Episode no ',i_episode+1)
 			total_reward = 0
-
 			ep_terminate = False
 
-			if total_t_iter>=100000:
-				self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
 			print('epsilon is',self.epsilon)		
 
 			for t_iter in range(self.iterations):
 
-				action = self.epsilon_greedy_policy(self.model.predict(state)) 
-				# self.env.render()
+				action = self.epsilon_greedy_policy(self.q_network.model.predict(state)) 
+				if total_updates<=100000:
+					self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
+
+				self.env.render()
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				total_reward+=reward
 				# if total_updates==100:
-				# print("updates",total_updates)
 
-				if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
+				if (self.terminate==0 and state[0][0]==0.5) or (self.terminate==1 and t_iter==200):
 					print("success")
 					ep_terminate = True
 					break
 
 				if done:
 					q_value_prime = reward
-					q_value_target = self.model.predict(state)
+					q_value_target = self.q_network.model.predict(state)
 					q_value_target[0][action] = q_value_prime
-					self.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
+					self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
 					print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
 					break
 				else:
-					q_value_prime = reward + self.gamma * np.max(self.model.predict(next_state)[0])
+					q_value_prime = reward + self.gamma * np.max(self.q_network.model.predict(next_state)[0])
 
-				q_value_target = self.model.predict(state)
+				q_value_target = self.q_network.model.predict(state)
 				q_value_target[0][action] = q_value_prime
-				self.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
+				self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
 				total_updates+=1
-				if total_updates % 10000== 0:
+				if total_updates % 100== 0:
 					print("saving model at",total_updates)
 					model_name = 'lqn_%d_model.h5' %(total_updates)
 					filepath = os.path.join(save_dir, model_name)
-					self.model.save(model_name)
+					self.q_network.model.save(model_name)
 				state = next_state
 
-			total_t_iter+=t_iter+1
-			print("Total iterations is",total_t_iter)
+			# total_t_iter+=t_iter#
+			# print("Total iterations is",total_t_iter)
+			print("Total updates ",total_updates)
+
 			print('----------------')
 
 			if ep_terminate==True:
+				print("saving model at",total_updates)
+				model_name = 'lqn_%d_model_final.h5' %(total_updates)
+				filepath = os.path.join(save_dir, model_name)
+				self.q_network.model.save(model_name)
 				break
 
-		print("Total iterations is %d" %(total_t_iter))
+		print("Ended")
 
 
 		# If you are using a replay memory, you should interact with environment here, and store these 

@@ -15,13 +15,14 @@ class QNetwork():
 	# and output Q values of the actions available to the agent as the output. 
 
 	def __init__(self, environment_name):
-		self.env = gym.make(environment_name)
 		self.model = Sequential()
-		self.state_size = self.env.observation_space.shape[0]
-		self.action_size = self.env.action_space.n
+		self.env = gym.make(environment_name)
 		self.alpha = 0.0001
 
-		self.model.add(Dense(self.action_size, input_dim=self.state_size,use_bias=True, activation='linear'))
+		self.model.add(Dense(32, input_dim=self.env.observation_space.shape[0],use_bias=True, activation='relu'))
+		self.model.add(Dense(64, use_bias=True, activation='relu'))
+		self.model.add(Dense(512, use_bias=True, activation='linear'))
+		self.model.add(Dense(self.env.action_space.n, activation='linear'))
 		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
 
 	def save_model_weights(self, suffix):
@@ -35,6 +36,27 @@ class QNetwork():
 	def load_model_weights(self,weight_file):
 	# Helper funciton to load model weights. 
 		pass
+
+# class Replay_Memory():
+
+# 	def __init__(self, memory_size=50000, burn_in=10000):
+
+# 		# The memory essentially stores transitions recorder from the agent
+# 		# taking actions in the environment.
+
+# 		# Burn in episodes define the number of episodes that are written into the memory from the 
+# 		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
+# 		# A simple (if not the most efficient) was to implement the memory is as a list of transitions. 
+# 		pass
+
+# 	def sample_batch(self, batch_size=32):
+# 		# This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
+# 		# You will feed this to your model to train.
+# 		pass
+
+# 	def append(self, transition):
+# 		# Appends transition to the memory. 	
+# 		pass
 
 class DQN_Agent():
 
@@ -58,7 +80,8 @@ class DQN_Agent():
 		self.state_size = self.env.observation_space.shape[0]
 		self.action_size = self.env.action_space.n
 
-		self.replay_memory_size=50000
+		#experience replay stuff
+		self.replay_memory_size=2000
 		self.memory = deque(maxlen=self.replay_memory_size)
 		self.batch_size = 32
 
@@ -72,12 +95,14 @@ class DQN_Agent():
 			self.iterations = 1000000 #given in handout
 			self.episodes = 3000 #check how many
 			self.terminate = 1
-
-		self.alpha = 0.0001
 		self.epsilon = 0.5
 		# episodes = 100
 
+		#the network stuff comes here
 		self.q_network = QNetwork(environment_name)
+
+		# print("aaaaaaaaaaaaaaaaaaa ",self.q_network.alpha)
+
 
 	def epsilon_greedy_policy(self, q_values):
 		# Creating epsilon greedy probabilities to sample from.             
@@ -97,29 +122,27 @@ class DQN_Agent():
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
 
-		save_dir = os.path.join(os.getcwd(), 'saved_models_lqn_replay')
+		save_dir = os.path.join(os.getcwd(), 'saved_models_dqn_replay')
 		if not os.path.isdir(save_dir):
 			os.makedirs(save_dir)
 		os.chdir(save_dir)
 
-		# total_t_iter = 0
 		total_updates = 0
 
 		for i_episode in range(self.episodes):
 			state = self.env.reset()
 			state = np.reshape(state,[1,self.state_size])	
-			# print(self.model.predict(state))
+			# print("aaaaaaaa ",self.q_network.model.predict(state))
 
 			print('Episode no ',i_episode+1)
 			total_reward = 0
-			ep_terminate = False
+			ep_terminate = False		
 
-			print('epsilon is',self.epsilon)		
+			print('epsilon is',self.epsilon)
 
 			for t_iter in range(self.iterations):
-		
 				action = self.epsilon_greedy_policy(self.q_network.model.predict(state)) 
-				if total_updates<=100000:#TO BE CHANGED
+				if total_updates<=100000:
 					self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
 
 				self.env.render()
@@ -159,16 +182,16 @@ class DQN_Agent():
 					filepath = os.path.join(save_dir, model_name)
 					self.q_network.model.save(model_name)		
 
-			# total_t_iter+=t_iter+1 
 			print("Total updates is",total_updates)
 			print('----------------')				
 
 
 			if ep_terminate==True:
-				model_name = 'lqn_%d_model_final.h5' %(total_updates)
+				model_name = 'lqn_%d_model.h5' %(total_updates)
 				filepath = os.path.join(save_dir, model_name)
-				self.q_network.q_network.model.save(model_name)	
+				self.q_network.model.save(model_name)
 				break
+
 
 
 		# If you are using a replay memory, you should interact with environment here, and store these 
