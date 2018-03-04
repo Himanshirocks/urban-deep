@@ -10,53 +10,23 @@ import random
 from keras import initializers
 import matplotlib.pyplot as plt
 
-class QNetwork():
-
-	# This class essentially defines the network architecture. 
-	# The network should take in state of the world as an input, 
-	# and output Q values of the actions available to the agent as the output. 
+class QNetwork(): 
 
 	def __init__(self, environment_name):
 		self.model = Sequential()
 		self.env = gym.make(environment_name)
 		self.alpha = 0.0001
 
-		self.model.add(Dense(32, input_dim=self.env.observation_space.shape[0],use_bias=True, activation='relu'))
-		self.model.add(Dense(64, use_bias=True, activation='relu'))
-		self.model.add(Dense(512, use_bias=True, activation='linear'))
+		self.model.add(Dense(16, input_dim=self.env.observation_space.shape[0],use_bias=True, activation='relu'))
+		self.model.add(Dense(32, use_bias=True, activation='relu'))
+		self.model.add(Dense(256, use_bias=True, activation='linear'))
 		self.model.add(Dense(self.env.action_space.n, activation='linear'))
 		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
 
-	def save_model_weights(self, suffix):
-	# Helper function to save your model / weights.
-		pass
-
-	def load_model(self, model_file):
-	# Helper function to load an existing model.
-		pass
-
-	def load_model_weights(self,weight_file):
-	# Helper funciton to load model weights. 
-		pass
-
 class DQN_Agent():
-
-	# In this class, we will implement functions to do the following. 
-	# (1) Create an instance of the Q Network class.
-	# (2) Create a function that constructs a policy from the Q values predicted by the Q Network. 
-	#		(a) Epsilon Greedy Policy.
-	# 		(b) Greedy Policy. 
-	# (3) Create a function to train the Q Network, by interacting with the environment.
-	# (4) Create a function to test the Q Network's performance on the environment.
-	# (5) Create a function for Experience Replay.
 	
 	def __init__(self, environment_name, render=False):
 
-		# Create an instance of the network itself, as well as the memory. 
-		# Here is also a good place to set environmental parameters,
-		# as well as training parameters - number of episodes / iterations, etc. 
-		
-		# env = QNetwork(environment_name)
 		self.env = gym.make(environment_name)
 		self.state_size = self.env.observation_space.shape[0]
 		self.action_size = self.env.action_space.n
@@ -96,8 +66,10 @@ class DQN_Agent():
 
 		if train_test_var:
 			if(rand<=self.train_epsilon):
+				# print("random")
 				return np.random.randint(0,self.action_size)
 			else:
+				# print("greedy")
 				return self.greedy_policy(q_values)
 		else:
 			if(rand<=self.train_evaluate_epsilon):
@@ -110,9 +82,6 @@ class DQN_Agent():
 		return np.argmax(q_values) 
 
 	def train(self):
-		# In this function, we will train our network. 
-		# If training without experience replay_memory, then you will interact with the environment 
-		# in this function, while also updating your network parameters. 
 
 		save_dir = os.path.join(os.getcwd(), 'saved_models_dqn_replay')
 		if not os.path.isdir(save_dir):
@@ -135,6 +104,7 @@ class DQN_Agent():
 
 			for t_iter in range(self.iterations):
 				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
+				# print(action)
 
 				if self.environment_num == 1:
 					if total_updates<=100000:
@@ -143,11 +113,15 @@ class DQN_Agent():
 					if total_updates<=30000:
 						self.train_epsilon = -((0.5-0.05)/30000)*total_updates + 0.5
 
-				# self.env.render()
+				# if i_episode>=1000:
+				# 	self.env.render()
 				next_state, reward, done, info = self.env.step(action)
 				next_state = np.reshape(state,[1,self.state_size])	
 				self.memory.append((state, action, reward, next_state, done))
-				total_reward+=reward					
+				total_reward+=reward	
+
+				#TO DO
+				#Are targets stationary				
 
 				if len(self.memory) > self.burn_in:
 					# print("accessing memory")
@@ -160,15 +134,12 @@ class DQN_Agent():
 							m_q_value_target[0][m_action] = m_q_value_prime
 							self.q_network.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)					
 				if done:
-					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
-						# print("states are")
-						# print(state[0][0])
-						# print(next_state[0][0])
+					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1==200):
 						success_count+=1
 						print("success")
 						# ep_terminate = True
 						# break	
-					print("Episode finished after {} iterations with %d reward".format(t_iter+1)%(total_reward)) 	
+					print("Episode finished after {} iterations with %d reward and %d success".format(t_iter+1)%(total_reward,success_count)) 	
 					break
 
 				state=next_state
@@ -209,7 +180,7 @@ class DQN_Agent():
 		for i in range(10000, self.final_update + 10000, 10000):
 			model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,i)
 			filepath = os.path.join(load_dir, model_name)
-			model = load_model(filepath)
+			test_model = load_model(filepath)
 			for e in range(num_episodes):
 				total_epi_reward = 0
 				print('Episode no ',e+1)
@@ -273,7 +244,7 @@ def main(args):
 	dqn_agen = DQN_Agent(environment_name)
 
 	dqn_agen.train()
-	dqn_agen.test()
+	# dqn_agen.test()
 
 	# Setting the session to allow growth, so it doesn't allocate all GPU memory. 
 	gpu_ops = tf.GPUOptions(allow_growth=True)

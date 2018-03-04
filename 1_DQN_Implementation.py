@@ -21,7 +21,7 @@ class QNetwork():
 		self.action_size = self.env.action_space.n
 		self.alpha = 0.0001
 
-		self.model.add(Dense(self.action_size, input_dim=self.state_size,kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.05),use_bias=True, activation='linear'))
+		self.model.add(Dense(self.action_size, input_dim=self.state_size,use_bias=True, activation='linear'))
 		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
 
 	def save_model_weights(self, suffix):
@@ -83,12 +83,12 @@ class DQN_Agent():
 		rand = np.random.uniform(0,1)
 		#Different Episolns for fitting model and evaluating the training
 		if train_test_var:
-			if(rand<=self.train_epsilon):
+			if rand<=self.train_epsilon:
 				return np.random.randint(0,self.action_size)
 			else:
 				return self.greedy_policy(q_values)
 		else:
-			if(rand<=self.train_evaluate_epsilon):
+			if rand<=self.train_evaluate_epsilon:
 				return np.random.randint(0,self.action_size)
 			else:
 				return self.greedy_policy(q_values) 
@@ -129,10 +129,14 @@ class DQN_Agent():
 				
 				if self.environment_num == 1:
 					if total_updates<=100000:
-						self.train_epsilon = -((0.5-0.05)/100000)*total_updates + 0.5  #decay epsilon 0.5 to 0.05
+						self.train_epsilon = -((starting_epsilon-0.05)/100000)*total_updates + starting_epsilon  #decay epsilon 0.5 to 0.05
+					else:
+						self.train_epsilon = 0.05
 				elif self.environment_num==2:
 					if total_updates<=30000:
-						self.train_epsilon = -((0.5-0.05)/30000)*total_updates + 0.5
+						self.train_epsilon = -((starting_epsilon-0.05)/30000)*total_updates + starting_epsilon
+					else:
+						self.train_epsilon = 0.05
 
 				# if total_updates<=100000:#TO BE CHANGED
 				# 	self.train_epsilon = self.train_epsilon - 0.45e-05 #decay epsilon
@@ -149,11 +153,11 @@ class DQN_Agent():
 					q_value_target = self.q_network.model.predict(state)
 					q_value_target[0][action] = q_value_prime
 					self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0) #doing sgd
-					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
+					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1==200):
 						success_count+=1
 						print("success")
 						# ep_terminate = True
-					print("Episode finished after {} iterations with %d rewards".format(t_iter+1)%(total_reward)) 
+					print("Episode finished after {} iterations with %d rewards and %d success".format(t_iter+1)%(total_reward,success_count)) 
 					break
 				else:
 					q_value_prime = reward + self.gamma * np.max(self.q_network.model.predict(next_state)[0])
@@ -198,33 +202,33 @@ class DQN_Agent():
 		for i in range(10000, self.final_update + 10000, 10000):
 			model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,i)
 			filepath = os.path.join(load_dir, model_name)
-			model = load_model(filepath)
+			test_model = load_model(filepath)
 			for e in range(num_episodes):
 				total_epi_reward = 0
 				print('Episode no ',e+1)
-				state = self.env.reset()
-				state = np.reshape(state,[1,self.state_size])	
+				test_state = self.env.reset()
+				test_state = np.reshape(test_state,[1,self.state_size])	
 
 				for t_iter in range(self.iterations):
 
-					action = self.epsilon_greedy_policy(self.q_network.model.predict(state),0) 					
+					test_action = self.epsilon_greedy_policy(test_model.predict(test_state),0) 					
 
 					self.env.render()
-					next_state, reward, done, info = self.env.step(action)
-					next_state = np.reshape(state,[1,self.state_size])	
-					total_epi_reward+=reward
+					test_next_state, test_reward, test_done, info = self.env.step(test_action)
+					test_next_state = np.reshape(test_state,[1,self.state_size])	
+					total_epi_reward+=test_reward
 					
 					# if (self.terminate==0 and state[0][0]==0.5) or (self.terminate==1 and t_iter==200):
 					# 	print("success")
 					# 	ep_terminate = True
 					# 	break
 
-					if done:
+					if test_done:
 						print("Model %d" %(i))
-						print("Episode finished after {} iterations with episodic reward %d".format(t_iter+1)%(total_epi_reward)) 
+						print("Episode finished after {} iterations with episodic reward %d and %d success".format(t_iter+1)%(total_epi_reward,success_count)) 
 						plot_mat[e,(i/10000) - 1] = total_epi_reward
 						break			
-					state = next_state
+					test_state = test_next_state
 
 		x = range(1,num_episodes + 1)
 		for i in range(len(x)):
@@ -259,7 +263,7 @@ def main(args):
 	dqn_agen = DQN_Agent(environment_name)
 
 	dqn_agen.train()
-	dqn_agen.test()
+	# dqn_agen.test()
 	
 	# Setting the session to allow growth, so it doesn't allocate all GPU memory. 
 	gpu_ops = tf.GPUOptions(allow_growth=True)
