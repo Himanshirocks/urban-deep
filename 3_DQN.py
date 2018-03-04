@@ -7,6 +7,8 @@ from keras.optimizers import Adam
 import os
 from collections import deque
 import random
+from keras import initializers
+import matplotlib.pyplot as plt
 
 class QNetwork():
 
@@ -60,25 +62,26 @@ class DQN_Agent():
 		self.action_size = self.env.action_space.n
 
 		#experience replay stuff
-		self.replay_memory_size=2000
+		self.replay_memory_size=50000
 		self.memory = deque(maxlen=self.replay_memory_size)
 		self.batch_size = 32
+		self.burn_in = 10000
 
 		if environment_name == 'MountainCar-v0':
 			self.gamma = 1
 			self.episodes = 3000 #given in handout
-			self.iterations = 100000 #check how many, stops at 200
+			self.iterations = 201 #check how many, stops at 200
 			self.terminate = 0
-			self.environment_name = 1 
+			self.environment_num = 1 
 		elif environment_name == 'CartPole-v0':
 			self.gamma = 0.99
 			self.iterations = 1000000 #given in handout
 			self.episodes = 5000 #check how many
 			self.terminate = 1
-			self.environment_name = 2
+			self.environment_num = 2
 		self.train_epsilon = 0.5
 		self.train_evaluate_epsilon = 0.05
-
+		self.final_update = 50000
 		# episodes = 100
 
 		#the network stuff comes here
@@ -128,12 +131,17 @@ class DQN_Agent():
 			total_reward = 0
 			ep_terminate = False		
 
-			print('epsilon is',self.epsilon)
+			print('epsilon is',self.train_epsilon)
 
 			for t_iter in range(self.iterations):
-				action = self.epsilon_greedy_policy(self.q_network.model.predict(state)) 
-				if total_updates<=100000:
-					self.epsilon = self.epsilon - 0.45e-05 #decay epsilon
+				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
+
+				if self.environment_num == 1:
+					if total_updates<=100000:
+						self.train_epsilon = -((0.5-0.05)/100000)*total_updates + 0.5  #decay epsilon 0.5 to 0.05
+				elif self.environment_num==2:
+					if total_updates<=30000:
+						self.train_epsilon = -((0.5-0.05)/30000)*total_updates + 0.5
 
 				# self.env.render()
 				next_state, reward, done, info = self.env.step(action)
@@ -141,14 +149,8 @@ class DQN_Agent():
 				self.memory.append((state, action, reward, next_state, done))
 				total_reward+=reward					
 
-	
-				# print(t_iter)
-				# print("t iter is %d"%(t_iter))
-
-				#TO DO
-				#save only last N
-
-				if len(self.memory) > self.batch_size:
+				if len(self.memory) > self.burn_in:
+					# print("accessing memory")
 					minibatch = random.sample(self.memory, self.batch_size)
 					for m_state, m_action, m_reward, m_next_state, m_done in minibatch:
 						m_q_value_prime = m_reward
@@ -159,6 +161,9 @@ class DQN_Agent():
 							self.q_network.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)					
 				if done:
 					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter==200):
+						# print("states are")
+						# print(state[0][0])
+						# print(next_state[0][0])
 						success_count+=1
 						print("success")
 						# ep_terminate = True
@@ -197,7 +202,56 @@ class DQN_Agent():
 	def test(self, model_file=None):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
-		pass
+		num_episodes = 20
+		plot_mat = np.zeros((num_episodes, (self.final_update/10000) + 1))
+		load_dir = os.path.join(os.getcwd(), 'saved_models_lqn_final')
+		print(self.final_update)
+		for i in range(10000, self.final_update + 10000, 10000):
+			model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,i)
+			filepath = os.path.join(load_dir, model_name)
+			model = load_model(filepath)
+			for e in range(num_episodes):
+				total_epi_reward = 0
+				print('Episode no ',e+1)
+				state = self.env.reset()
+				state = np.reshape(state,[1,self.state_size])	
+
+				for t_iter in range(self.iterations):
+
+					action = self.epsilon_greedy_policy(self.q_network.model.predict(state),0) 					
+
+					self.env.render()
+					next_state, reward, done, info = self.env.step(action)
+					next_state = np.reshape(state,[1,self.state_size])	
+					total_epi_reward+=reward
+					
+					# if (self.terminate==0 and state[0][0]==0.5) or (self.terminate==1 and t_iter==200):
+					# 	print("success")
+					# 	ep_terminate = True
+					# 	break
+
+					if done:
+						print("Model %d" %(i))
+						print("Episode finished after {} iterations with episodic reward %d".format(t_iter+1)%(total_epi_reward)) 
+						plot_mat[e,(i/10000) - 1] = total_epi_reward
+						break			
+					state = next_state
+
+		x = range(1,num_episodes + 1)
+		for i in range(len(x)):
+			plot_mat[i,(self.final_update/10000)] = x[i]
+
+
+		for i in range(1,self.final_update/10000):
+			plt.figure(i)
+			print(plot_mat[:,(self.final_update/10000)])
+			print(plot_mat[:,i])
+			plt.plot(plot_mat[:,(self.final_update/10000)], plot_mat[:,i])
+			plt.title('%d Model' %(i))
+			# plt.show()			
+			plt.savefig('graph_%d.eps' %(i),bbox_inches='tight' )
+
+		exit()
 
   #   def burn_in_memory():
 		# # # Initialize your replay memory with a burn_in number of episodes / transitions. 
@@ -219,6 +273,7 @@ def main(args):
 	dqn_agen = DQN_Agent(environment_name)
 
 	dqn_agen.train()
+	dqn_agen.test()
 
 	# Setting the session to allow growth, so it doesn't allocate all GPU memory. 
 	gpu_ops = tf.GPUOptions(allow_growth=True)
