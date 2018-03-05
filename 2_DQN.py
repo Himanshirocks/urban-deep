@@ -136,7 +136,7 @@ class DQN_Agent():
 			total_reward = 0
 			ep_terminate = False
 
-			print('epsilon is',self.train_epsilon)		
+			print('Training epsilon is',self.train_epsilon)		
 
 			for t_iter in range(self.iterations):
 		
@@ -166,7 +166,7 @@ class DQN_Agent():
 							total_updates+=1	
 
 				if (total_updates) % 10000 == 0:
-					print("Saving model at",total_updates)
+					# print("Saving model at",total_updates)
 					model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,total_updates) 
 					filepath = os.path.join(save_dir, model_name)
 					self.q_network.model.save(model_name)	
