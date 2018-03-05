@@ -192,7 +192,7 @@ class DQN_Agent():
 		model_name = 'lqn_%d_%d_model_final.h5' %(self.environment_num,total_updates) 
 		filepath = os.path.join(save_dir, model_name)
 		self.q_network.model.save(model_name)
-		print("Total success is %d and highest is %d " %(success_count,max_reward))
+		print("Total success is %d and highest is %d " %(success_count,self.max_reward))
 
 
 		# If you are using a replay memory, you should interact with environment here, and store these 
