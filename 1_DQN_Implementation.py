@@ -64,13 +64,15 @@ class DQN_Agent():
 			self.iterations = 201 #check how many, stops at 200
 			self.terminate = 0 #0 for this env
 			self.environment_num = 1
+			self.max_reward = -200
 		elif environment_name == 'CartPole-v0':
 			self.gamma = 0.99
-			self.iterations = 1000000 #given in handout
-			self.episodes = 5000 #check how many
+			self.episodes = 10000000 #check how many
+			self.iterations = 300 #given in handout
 			self.terminate = 1
 			self.environment_num = 2
-		self.train_epsilon = 0.5
+			self.max_reward = 0
+		self.train_epsilon = 0.85
 		self.train_evaluate_epsilon = 0.05
 		self.final_update = 50000
 		# episodes = 100
@@ -110,10 +112,19 @@ class DQN_Agent():
 		# total_t_iter = 0
 		total_updates = 0
 		success_count = 0
+		# max_reward = 0
+		# min_reward = -200
+
+		total_t_iter = 0
 
 		starting_epsilon = self.train_epsilon
 
 		for i_episode in range(self.episodes):
+
+			if self.environment_num==2:
+				if total_updates>1000000:
+					break
+
 			state = self.env.reset()
 			state = np.reshape(state,[1,self.state_size])	
 			# print(self.model.predict(state))
@@ -126,67 +137,62 @@ class DQN_Agent():
 			for t_iter in range(self.iterations):
 
 				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
-				
-				if self.environment_num == 1:
-					if total_updates<=100000:
-						self.train_epsilon = -((starting_epsilon-0.05)/100000)*total_updates + starting_epsilon  #decay epsilon 0.5 to 0.05
-					else:
-						self.train_epsilon = 0.05
-				elif self.environment_num==2:
-					if total_updates<=30000:
-						self.train_epsilon = -((starting_epsilon-0.05)/30000)*total_updates + starting_epsilon
-					else:
-						self.train_epsilon = 0.05
 
-				# if total_updates<=100000:#TO BE CHANGED
-				# 	self.train_epsilon = self.train_epsilon - 0.45e-05 #decay epsilon
-
-				# if i_episode >=2500:
-				# 	self.env.render()
-				next_state, reward, done, info = self.env.step(action)
-				next_state = np.reshape(state,[1,self.state_size])	
-				total_reward+=reward
-				# if total_updates==100:
-
-				if done:
-					q_value_prime = reward
-					q_value_target = self.q_network.model.predict(state)
-					q_value_target[0][action] = q_value_prime
-					self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0) #doing sgd
-					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1==200):
-						success_count+=1
-						print("success")
-						# ep_terminate = True
-					print("Episode finished after {} iterations with %d rewards and %d success".format(t_iter+1)%(total_reward,success_count)) 
-					break
+				if total_updates<=200000:
+					self.train_epsilon = -((starting_epsilon-0.05)/200000)*total_updates + starting_epsilon  #decay epsilon 0.5 to 0.05
 				else:
-					q_value_prime = reward + self.gamma * np.max(self.q_network.model.predict(next_state)[0])
+					self.train_epsilon = 0.05
 
+				next_state, reward, done, info = self.env.step(action)
+				total_reward+=reward
+
+				q_value_prime = reward
+				if not done:
+					next_state = np.reshape(state,[1,self.state_size])						
+					q_value_prime = reward + self.gamma * np.max(self.q_network.model.predict(next_state)[0])
+				
 				q_value_target = self.q_network.model.predict(state)
 				q_value_target[0][action] = q_value_prime
-				self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0)
+				self.q_network.model.fit(state,q_value_target,batch_size=None,epochs=1, verbose=0) #doing sgd
 				total_updates+=1
+				
 				if total_updates % 10000 == 0:
 					print("Saving model at",total_updates)
 					model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,total_updates) 
 					filepath = os.path.join(save_dir, model_name)
 					self.q_network.model.save(model_name)
+
+				# # if total_updates >1000000:
+				# # 	ep_terminate = True
+				# # 	break
+
+				if done:
+					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1>=200):
+						success_count+=1
+
+					print("Episode finished after {} iterations and %d success and max till now %d ".format(t_iter+1)%(success_count,self.max_reward)) 
+
+					if total_reward>self.max_reward:
+						self.max_reward = total_reward
+					break
+
 				state = next_state
 
-			# total_t_iter+=t_iter#
-			# print("Total iterations is",total_t_iter)
+			# print("total_t_iter",total_t_iter)
+	
 			print("Total updates ",total_updates)
 
 			print('----------------')
 
 			# if ep_terminate==True:
+			# 	break
 
-				# break
+
 		print("Saving final model at",total_updates)
 		model_name = 'lqn_%d_%d_model_final.h5' %(self.environment_num,total_updates) 
 		filepath = os.path.join(save_dir, model_name)
 		self.q_network.model.save(model_name)
-		print("Total success is ",success_count)
+		print("Total success is %d and highest is %d " %(success_count,max_reward))
 
 
 		# If you are using a replay memory, you should interact with environment here, and store these 
