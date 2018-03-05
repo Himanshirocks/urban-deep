@@ -143,7 +143,7 @@ class DQN_Agent():
 				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
 				if total_updates<=200000:
 					self.train_epsilon = -((starting_epsilon-0.05)/200000)*total_updates + starting_epsilon  #decay epsilon 0.5 to 0.05
-				elif:
+				elif total_updates==0:
 					self.train_epsilon = starting_epsilon;
 				else:
 					self.train_epsilon = 0.05
