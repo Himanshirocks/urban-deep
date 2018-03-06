@@ -1,27 +1,31 @@
 #!/usr/bin/env python
 import keras, tensorflow as tf, numpy as np, gym, sys, copy, argparse
-
 from keras.layers import Dense
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.optimizers import Adam
 import os
 from collections import deque
 import random
 from keras import initializers
 import matplotlib.pyplot as plt
+from keras import backend as keras_back
 
 class QNetwork(): 
 
 	def __init__(self, environment_name):
 		self.model = Sequential()
 		self.env = gym.make(environment_name)
-		self.alpha = 0.0001
+		self.alpha = 0.001
 
-		self.model.add(Dense(16, input_dim=self.env.observation_space.shape[0],use_bias=True, activation='relu'))
-		self.model.add(Dense(32, use_bias=True, activation='relu'))
-		self.model.add(Dense(256, use_bias=True, activation='linear'))
+		self.model.add(Dense(32, input_dim=self.env.observation_space.shape[0], activation='relu'))
+		self.model.add(Dense(32, activation='relu'))
+		self.model.add(Dense(32, activation='relu'))
 		self.model.add(Dense(self.env.action_space.n, activation='linear'))
-		self.model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
+		self.model.compile(loss=self._huber_loss, optimizer=Adam(lr=self.alpha))
+
+	def _huber_loss(self, target, prediction):
+		error = prediction - target
+		return keras_back.mean(keras_back.sqrt(1+keras_back.square(error))-1, axis=-1)
 
 class DQN_Agent():
 	
@@ -31,7 +35,7 @@ class DQN_Agent():
 		self.state_size = self.env.observation_space.shape[0]
 		self.action_size = self.env.action_space.n
 
-		#experience replay stuff
+		#experience replay 
 		self.replay_memory_size=50000
 		self.memory = deque(maxlen=self.replay_memory_size)
 		self.batch_size = 32
@@ -46,18 +50,13 @@ class DQN_Agent():
 		elif environment_name == 'CartPole-v0':
 			self.gamma = 0.99
 			self.iterations = 1000000 #given in handout
-			self.episodes = 5000 #check how many
+			self.episodes = 100000000 #check how many
 			self.terminate = 1
 			self.environment_num = 2
-		self.train_epsilon = 0.5
+		self.train_epsilon = 1
 		self.train_evaluate_epsilon = 0.05
 		self.final_update = 50000
-		# episodes = 100
-
-		#the network stuff comes here
 		self.q_network = QNetwork(environment_name)
-
-		# print("aaaaaaaaaaaaaaaaaaa ",self.q_network.alpha)
 
 
 	def epsilon_greedy_policy(self, q_values,train_test_var):
@@ -81,6 +80,8 @@ class DQN_Agent():
 		# Creating greedy policy for test time. 
 		return np.argmax(q_values) 
 
+
+
 	def train(self):
 
 		save_dir = os.path.join(os.getcwd(), 'saved_models_dqn_replay')
@@ -91,37 +92,45 @@ class DQN_Agent():
 		total_updates = 0
 		success_count = 0
 
+		starting_epsilon = self.train_epsilon
+
 		for i_episode in range(self.episodes):
+			if self.environment_num==2 and total_updates > 1000000:
+				break
+
 			state = self.env.reset()
 			state = np.reshape(state,[1,self.state_size])	
-			# print("aaaaaaaa ",self.q_network.model.predict(state))
 
-			print('Episode no ',i_episode+1)
+			# print('Episode no {}, epsilon is {}'.format(i_episode+1, self.train_epsilon))
 			total_reward = 0
 			ep_terminate = False		
 
-			print('epsilon is',self.train_epsilon)
-
 			for t_iter in range(self.iterations):
 				action = self.epsilon_greedy_policy(self.q_network.model.predict(state),1) 
-				# print(action)
 
 				if self.environment_num == 1:
-					if total_updates<=100000:
-						self.train_epsilon = -((0.5-0.05)/100000)*total_updates + 0.5  #decay epsilon 0.5 to 0.05
+					if (len(self.memory)> self.burn_in) and total_updates<=100000:
+						self.train_epsilon = -((starting_epsilon-0.1)/100000)*total_updates + starting_epsilon #decay epsilon 1 to 0.1
+					elif total_updates == 0:
+						self.train_epsilon = 1
+					else:
+						self.train_epsilon = 0.1
 				elif self.environment_num==2:
-					if total_updates<=30000:
-						self.train_epsilon = -((0.5-0.05)/30000)*total_updates + 0.5
+					if (len(self.memory)> self.burn_in) and total_updates<=500000:
+						self.train_epsilon = -((starting_epsilon-0.1)/500000)*total_updates + starting_epsilon #decay epsilon 1 to 0.1
+					elif total_updates == 0:
+						self.train_epsilon = 1
+					else:
+						self.train_epsilon = 0.1
 
-				# if i_episode>=1000:
-				# 	self.env.render()
 				next_state, reward, done, info = self.env.step(action)
+				reward = reward if not done else -10
 				next_state = np.reshape(state,[1,self.state_size])	
 				self.memory.append((state, action, reward, next_state, done))
 				total_reward+=reward	
-
 				#TO DO
-				#Are targets stationary				
+				#Are targets stationary		
+				state=next_state		
 
 				if len(self.memory) > self.burn_in:
 					# print("accessing memory")
@@ -132,26 +141,29 @@ class DQN_Agent():
 							m_q_value_prime = m_reward + self.gamma * np.max(self.q_network.model.predict(m_next_state)[0])
 							m_q_value_target = self.q_network.model.predict(m_state)
 							m_q_value_target[0][m_action] = m_q_value_prime
-							self.q_network.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)					
+							self.q_network.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)	
+							total_updates+=1
+							w = self.q_network.model.get_weights()
+							# print(w)
+
 				if done:
-					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1==200):
+					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and total_reward>=100):
+					# if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and t_iter+1==200):
 						success_count+=1
-						print("success")
 						# ep_terminate = True
 						# break	
-					print("Episode finished after {} iterations with %d reward and %d success".format(t_iter+1)%(total_reward,success_count)) 	
-					break
+					print("Episode {} total reward {} epsilon {} successes {} total_updates {} Score {}"
+																.format(i_episode,total_reward,self.train_epsilon,success_count, total_updates, t_iter + 1))	
+					break		
 
-				state=next_state
-
-				total_updates+=1
+				
 				if (total_updates) % 10000 == 0:
 					model_name = 'lqn_%d_%d_model.h5' %(self.environment_num,total_updates) 
 					filepath = os.path.join(save_dir, model_name)
 					self.q_network.model.save(model_name)		
 
-			print("Total updates is",total_updates)
-			print('----------------')				
+			# print("Total updates is",total_updates)
+			# print('----------------')				
 
 
 		print("Saving final model at",total_updates)
