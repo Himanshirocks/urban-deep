@@ -17,9 +17,9 @@ class QNetwork():
 		self.env = gym.make(environment_name)
 		self.alpha = 0.001
 
-		self.model.add(Dense(32, input_dim=self.env.observation_space.shape[0], activation='relu'))
-		self.model.add(Dense(32, activation='relu'))
-		self.model.add(Dense(32, activation='relu'))
+		self.model.add(Dense(4, input_dim=self.env.observation_space.shape[0], use_bias=True, activation='relu'))
+		self.model.add(Dense(16, use_bias=True, activation='relu'))
+		self.model.add(Dense(32, use_bias=True, activation='relu'))
 		self.model.add(Dense(self.env.action_space.n, activation='linear'))
 		self.model.compile(loss=self._huber_loss, optimizer=Adam(lr=self.alpha))
 
@@ -144,7 +144,6 @@ class DQN_Agent():
 							self.q_network.model.fit(m_state,m_q_value_target,epochs=1, verbose=0)	
 							total_updates+=1
 							w = self.q_network.model.get_weights()
-							# print(w)
 
 				if done:
 					if (self.terminate==0 and total_reward>-200) or (self.terminate==1 and total_reward>=100):
