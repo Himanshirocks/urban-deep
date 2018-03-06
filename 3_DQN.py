@@ -15,11 +15,11 @@ class QNetwork():
 	def __init__(self, environment_name):
 		self.model = Sequential()
 		self.env = gym.make(environment_name)
-		self.alpha = 0.001
+		self.alpha = 0.00025
 
-		self.model.add(Dense(4, input_dim=self.env.observation_space.shape[0], use_bias=True, activation='relu'))
-		self.model.add(Dense(16, use_bias=True, activation='relu'))
-		self.model.add(Dense(32, use_bias=True, activation='relu'))
+		self.model.add(Dense(10, input_dim=self.env.observation_space.shape[0], use_bias=True, activation='relu'))
+		self.model.add(Dense(20, use_bias=True, activation='relu'))
+		self.model.add(Dense(30, use_bias=True, activation='relu'))
 		self.model.add(Dense(self.env.action_space.n, activation='linear'))
 		self.model.compile(loss=self._huber_loss, optimizer=Adam(lr=self.alpha))
 
