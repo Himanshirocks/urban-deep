@@ -20,7 +20,7 @@ class QNetwork():
 	def __init__(self, environment_name):
 
 		self.env = gym.make(environment_name)
-		self.alpha = 0.001 #0.001 or 0.0001
+		self.alpha = 0.0001 #0.001 or 0.0001
 
 		self.model = Sequential()
 		input_layer = Input(shape = self.env.observation_space.shape)
@@ -28,8 +28,8 @@ class QNetwork():
 		hidden_layer2 = Dense(20, activation='relu')(hidden_layer1)
 		hidden_layer3 = Dense(30, activation='relu')(hidden_layer2)	
 		
-		value_layer = Dense(1)(hidden_layer1)
-		advantage_layer = Dense(self.env.action_space.n)(hidden_layer1)
+		value_layer = Dense(1)(hidden_layer3)
+		advantage_layer = Dense(self.env.action_space.n)(hidden_layer3)
 
 		value_layer2 = Lambda(lambda s: K.expand_dims(s[:, 0], axis=-1),output_shape = (self.env.action_space.n,))(value_layer)
 		advantage_layer2 = Lambda(lambda a: a[:, :] - K.max(a[:, :], keepdims=True),output_shape = (self.env.action_space.n,))(advantage_layer)
@@ -55,7 +55,7 @@ class DQN_Agent():
 		self.memory = deque(maxlen=self.replay_memory_size)
 		self.batch_size = 32
 		# self.burn_in = 10000
-		self.burn_in = 1000
+		self.burn_in = 10000
 
 		if environment_name == 'MountainCar-v0':
 			self.gamma = 1
